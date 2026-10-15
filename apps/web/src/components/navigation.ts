@@ -25,10 +25,12 @@ export const NAV_BY_ROLE: Record<Role, readonly NavItem[]> = {
     { label: 'Mi proceso', to: '/aspirante' },
     { label: 'Inscripción', to: '/aspirante/inscripcion' },
     { label: 'Recibo de pago', to: '/aspirante/recibo' },
+    { label: 'Chat', to: '/aspirante/chat' },
   ],
   STUDENT: [
     { label: 'Mi inscripción', to: '/estudiante' },
     { label: 'Mi recibo', to: '/estudiante/recibo' },
+    { label: 'Chat', to: '/estudiante/chat' },
   ],
   ADMIN: [
     { label: 'Panel', to: '/admin' },

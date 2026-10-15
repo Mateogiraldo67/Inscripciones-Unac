@@ -12,5 +12,6 @@ export default defineConfig({
     // El bundle real recibe estas variables de Vite en tiempo de construcción;
     // en las pruebas se fijan aquí para no depender de un .env.
     'import.meta.env.VITE_API_URL': JSON.stringify('http://localhost:3000'),
+    'import.meta.env.VITE_N8N_WEBHOOK_URL': JSON.stringify('http://localhost:9999/webhook/chat-test'),
   },
 });

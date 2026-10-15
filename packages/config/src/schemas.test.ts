@@ -201,9 +201,21 @@ describe('seedEnvSchema', () => {
 });
 
 describe('webEnvSchema', () => {
+  const valido = {
+    VITE_API_URL: 'http://localhost:3000',
+    VITE_N8N_WEBHOOK_URL: 'https://n8n.example.com/webhook/chat',
+  };
+
   it('exige la URL del API', () => {
     expect(webEnvSchema.safeParse({}).success).toBe(false);
-    expect(webEnvSchema.safeParse({ VITE_API_URL: 'http://localhost:3000' }).success).toBe(true);
+    expect(webEnvSchema.safeParse({ VITE_N8N_WEBHOOK_URL: valido.VITE_N8N_WEBHOOK_URL }).success).toBe(
+      false,
+    );
+    expect(webEnvSchema.safeParse(valido).success).toBe(true);
+  });
+
+  it('exige la URL del webhook de chat', () => {
+    expect(webEnvSchema.safeParse({ VITE_API_URL: valido.VITE_API_URL }).success).toBe(false);
   });
 });
 

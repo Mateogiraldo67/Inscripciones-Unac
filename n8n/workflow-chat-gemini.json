@@ -1,0 +1,228 @@
+{
+  "name": "Chatbot - Webhook + Gemini",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Cómo configurar este workflow\n1. Importa este archivo en tu instancia de n8n (Workflows → Import from File).\n2. Crea una credencial **HTTP Header Auth** llamada `Gemini API Key` con:\n   - Name: `x-goog-api-key`\n   - Value: tu API Key de Google AI Studio\n3. Abre el nodo **Gemini - generateContent** y selecciona esa credencial.\n4. Activa el workflow y copia la URL de producción del nodo Webhook.\n5. Pega esa URL en `VITE_N8N_WEBHOOK_URL` del frontend.\n\nDetalles completos en `README.md` del proyecto.",
+        "height": 260,
+        "width": 380
+      },
+      "id": "sticky-setup",
+      "name": "Nota - Configuración",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [-200, -360]
+    },
+    {
+      "parameters": {
+        "content": "## Memoria e historial\nEl historial de cada `sessionId` se guarda en los **datos estáticos del workflow** (en memoria/BD de n8n), acotado a los últimos 20 turnos.\n\nEsto es correcto para un volumen moderado en una sola instancia de n8n. Si escalas a varios workers o necesitas historial duradero, reemplaza esta parte por un nodo de Postgres/Redis.",
+        "height": 220,
+        "width": 340
+      },
+      "id": "sticky-history",
+      "name": "Nota - Historial",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [860, -360]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chat-gemini",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Recibir mensaje",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-200, 0],
+      "webhookId": "chat-gemini-webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\nconst body = input.body ?? input;\n\nconst sessionId = (body.sessionId || '').toString().trim();\nconst rawMessage = (body.message || '').toString().trim();\n\nconst errors = [];\nif (!sessionId) errors.push('sessionId es obligatorio.');\nif (!rawMessage) errors.push('message no puede estar vacío.');\nif (rawMessage.length > 4000) errors.push('message supera el máximo de 4000 caracteres.');\n\nlet rateLimited = false;\nconst data = $getWorkflowStaticData('global');\nif (!data.rateLimit) data.rateLimit = {};\n\nif (errors.length === 0) {\n  const WINDOW_MS = 60000;\n  const MAX_REQUESTS = 10;\n  const now = Date.now();\n  const bucket = (data.rateLimit[sessionId] || []).filter((t) => now - t < WINDOW_MS);\n\n  if (bucket.length >= MAX_REQUESTS) {\n    rateLimited = true;\n    errors.push('Has enviado demasiados mensajes. Espera un minuto antes de volver a intentar.');\n  } else {\n    bucket.push(now);\n    data.rateLimit[sessionId] = bucket;\n  }\n}\n\nreturn [{\n  json: {\n    isValid: errors.length === 0,\n    rateLimited,\n    errorMessage: errors.join(' '),\n    sessionId,\n    message: rawMessage,\n  },\n}];\n"
+      },
+      "id": "code-validar",
+      "name": "Code - Validar entrada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [20, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.isValid}}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-valido",
+      "name": "IF - ¿Entrada válida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [240, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const { sessionId, message } = $json;\nconst MAX_TURNS = 20;\n\nconst data = $getWorkflowStaticData('global');\nif (!data.conversations) data.conversations = {};\nif (!data.conversations[sessionId]) data.conversations[sessionId] = [];\n\nconst history = data.conversations[sessionId].slice(-MAX_TURNS);\n\nconst contents = history.map((turn) => ({\n  role: turn.role,\n  parts: [{ text: turn.text }],\n}));\n\ncontents.push({ role: 'user', parts: [{ text: message }] });\n\nreturn [{\n  json: {\n    sessionId,\n    message,\n    contents,\n  },\n}];\n"
+      },
+      "id": "code-historial",
+      "name": "Code - Construir historial",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, -120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ systemInstruction: { parts: [{ text: 'Eres el asistente virtual de SION, la plataforma de inscripción de nuevos estudiantes de la Universidad Adventista de Colombia (UNAC). Responde en español, de forma clara, breve y amable. Si no sabes algo con certeza, dilo con honestidad en vez de inventar. Contexto del proceso que debes conocer: un aspirante crea una cuenta con correo y contraseña, inicia sesión, y diligencia su inscripción en un formulario de tres pasos (datos personales, programa académico, y documentos). Los documentos requeridos son documento de identidad, resultados del examen ICFES, y diploma de bachiller. Tras enviar la inscripción, un administrador la revisa y verifica el pago del derecho de inscripción, que genera un recibo con número y fecha límite de pago. Según el programa, puede haber una entrevista de admisión antes de la decisión final. Si la inscripción es aprobada, el aspirante pasa automáticamente a ser estudiante; si es rechazada, se explica el motivo y puede corregir y reenviar. No tienes acceso a los datos reales de ningún aspirante ni a su estado de inscripción específico, así que si preguntan por eso diles que lo consulten dentro de su cuenta. Tampoco conoces fechas ni tarifas exactas del periodo actual; si preguntan por eso, diles que lo confirmen con la administración de la universidad.' }] }, contents: $json.contents, generationConfig: { temperature: 0.7, maxOutputTokens: 1024 } }) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "http-gemini",
+      "name": "Gemini - generateContent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueErrorOutput",
+      "position": [680, -120],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REEMPLAZAR_AL_IMPORTAR",
+          "name": "Gemini API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const sessionId = $('Code - Construir historial').item.json.sessionId;\nconst message = $('Code - Construir historial').item.json.message;\nconst response = $input.first().json;\n\nconst reply = response?.candidates?.[0]?.content?.parts?.map((p) => p.text).join('')\n  ?? 'No se obtuvo una respuesta del modelo. Intenta reformular tu pregunta.';\n\nconst data = $getWorkflowStaticData('global');\nconst history = data.conversations[sessionId];\nhistory.push({ role: 'user', text: message });\nhistory.push({ role: 'model', text: reply });\n\nconst MAX_STORED_TURNS = 40;\nif (history.length > MAX_STORED_TURNS) {\n  history.splice(0, history.length - MAX_STORED_TURNS);\n}\n\nreturn [{\n  json: {\n    success: true,\n    sessionId,\n    reply,\n    timestamp: new Date().toISOString(),\n  },\n}];\n"
+      },
+      "id": "code-ok",
+      "name": "Code - Formatear respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, -220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "respond-ok",
+      "name": "Respond - 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, -220]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const sessionId = $('Code - Construir historial').item.json.sessionId;\n\nreturn [{\n  json: {\n    success: false,\n    sessionId,\n    error: 'No se pudo generar una respuesta en este momento. Intenta de nuevo en unos segundos.',\n    code: 'PROVIDER_ERROR',\n  },\n}];\n"
+      },
+      "id": "code-error-proveedor",
+      "name": "Code - Formatear error (Gemini)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, -20]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 502
+        }
+      },
+      "id": "respond-error-proveedor",
+      "name": "Respond - 502 Proveedor",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, -20]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const code = $json.rateLimited ? 'RATE_LIMITED' : 'VALIDATION_ERROR';\n\nreturn [{\n  json: {\n    success: false,\n    error: $json.errorMessage,\n    code,\n  },\n}];\n"
+      },
+      "id": "code-error-validacion",
+      "name": "Code - Formatear error (validación)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 220]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": "={{ $json.code === 'RATE_LIMITED' ? 429 : 400 }}"
+        }
+      },
+      "id": "respond-error-validacion",
+      "name": "Respond - 400/429 Validación",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 220]
+    }
+  ],
+  "connections": {
+    "Webhook - Recibir mensaje": {
+      "main": [[{ "node": "Code - Validar entrada", "type": "main", "index": 0 }]]
+    },
+    "Code - Validar entrada": {
+      "main": [[{ "node": "IF - ¿Entrada válida?", "type": "main", "index": 0 }]]
+    },
+    "IF - ¿Entrada válida?": {
+      "main": [
+        [{ "node": "Code - Construir historial", "type": "main", "index": 0 }],
+        [{ "node": "Code - Formatear error (validación)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Code - Construir historial": {
+      "main": [[{ "node": "Gemini - generateContent", "type": "main", "index": 0 }]]
+    },
+    "Gemini - generateContent": {
+      "main": [
+        [{ "node": "Code - Formatear respuesta", "type": "main", "index": 0 }],
+        [{ "node": "Code - Formatear error (Gemini)", "type": "main", "index": 0 }]
+      ]
+    },
+    "Code - Formatear respuesta": {
+      "main": [[{ "node": "Respond - 200 OK", "type": "main", "index": 0 }]]
+    },
+    "Code - Formatear error (Gemini)": {
+      "main": [[{ "node": "Respond - 502 Proveedor", "type": "main", "index": 0 }]]
+    },
+    "Code - Formatear error (validación)": {
+      "main": [[{ "node": "Respond - 400/429 Validación", "type": "main", "index": 0 }]]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

@@ -15,6 +15,7 @@ import {
   ApplicantEnrollment,
   ApplicantHome,
   ApplicantReceipt,
+  ChatPage,
   StudentHome,
   StudentReceipt,
 } from './routes/role-routes';
@@ -151,6 +152,12 @@ const applicantReceiptRoute = createRoute({
   component: ApplicantReceipt,
 });
 
+const applicantChatRoute = createRoute({
+  getParentRoute: () => applicantLayout,
+  path: '/aspirante/chat',
+  component: ChatPage,
+});
+
 const studentLayout = createRoute({
   getParentRoute: () => protectedLayout,
   id: 'estudiante',
@@ -167,6 +174,12 @@ const studentReceiptRoute = createRoute({
   getParentRoute: () => studentLayout,
   path: '/estudiante/recibo',
   component: StudentReceipt,
+});
+
+const studentChatRoute = createRoute({
+  getParentRoute: () => studentLayout,
+  path: '/estudiante/chat',
+  component: ChatPage,
 });
 
 /** Zona de administración. El guard vive en la ruta padre y lo heredan todas. */
@@ -250,8 +263,9 @@ const routeTree = rootRoute.addChildren([
       applicantHomeRoute,
       applicantEnrollmentRoute,
       applicantReceiptRoute,
+      applicantChatRoute,
     ]),
-    studentLayout.addChildren([studentHomeRoute, studentReceiptRoute]),
+    studentLayout.addChildren([studentHomeRoute, studentReceiptRoute, studentChatRoute]),
     adminLayout.addChildren([
       adminHomeRoute,
       adminGoalsRoute,

@@ -8,6 +8,7 @@ import { EnrollmentWizard } from '../features/enrollment/components/enrollment-w
 import { ProcessPanel } from '../features/enrollment/components/process-panel';
 import { ReceiptPanel } from '../features/enrollment/components/receipt-panel';
 import { AdminDashboard } from '../features/admin/components/admin-dashboard';
+import { ChatWindow } from '../features/chat/components/chat-window';
 
 function Cargando() {
   return (
@@ -132,6 +133,18 @@ export function StudentHome() {
 
 export function StudentReceipt() {
   return <ApplicantReceipt />;
+}
+
+/** Pantalla de chat. Misma para aspirante y estudiante: ninguno de los dos depende
+ * de datos propios de la inscripción, así que no hay nada que distinguir aquí. */
+export function ChatPage() {
+  return (
+    <div className="chat-pagina">
+      <h1>Chat</h1>
+      <p className="subtitulo">Pregunta sobre tu proceso de inscripción.</p>
+      <ChatWindow />
+    </div>
+  );
 }
 
 export function AdminHome() {

@@ -150,5 +150,10 @@ export type SeedEnv = z.infer<typeof seedEnvSchema>;
  */
 export const webEnvSchema = z.object({
   VITE_API_URL: z.url({ message: 'debe ser la URL base del API, por ejemplo http://localhost:3000' }),
+  // No es un secreto: es la URL pública del webhook del flujo de chat en n8n. El
+  // propio flujo valida la entrada y limita los envíos; este repo no le añade nada.
+  VITE_N8N_WEBHOOK_URL: z.url({
+    message: 'debe ser la URL del webhook de n8n, por ejemplo https://tu-instancia.app.n8n.cloud/webhook/chat-gemini-v2',
+  }),
 });
 export type WebEnv = z.infer<typeof webEnvSchema>;
